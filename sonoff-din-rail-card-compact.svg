@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 108 264" role="img" aria-label="DIN-реле без винтов">
+  <defs>
+    <linearGradient id="body" x2="1" y2="0"><stop stop-color="#cbd0d1"/><stop offset=".08" stop-color="#f5f6f5"/><stop offset=".88" stop-color="#eef0ef"/><stop offset="1" stop-color="#bfc5c7"/></linearGradient>
+    <linearGradient id="face" x2="0" y2="1"><stop stop-color="#f8f9f8"/><stop offset="1" stop-color="#e4e7e7"/></linearGradient>
+    <filter id="shadow" x="-20%" y="-10%" width="140%" height="130%"><feDropShadow dx="1" dy="2" stdDeviation="2" flood-opacity=".22"/></filter>
+  </defs>
+  <rect x="3" y="2" width="102" height="260" rx="3" fill="url(#body)" stroke="#c2c8ca" filter="url(#shadow)"/>
+  <rect x="7" y="7" width="94" height="48" rx="1" fill="url(#face)" stroke="#c9cdcd"/>
+  <path d="M6 55h96v4H6z" fill="#bfc5c6"/>
+  <rect x="7" y="61" width="94" height="101" rx="1" fill="url(#face)" stroke="#c6cbcb"/>
+  <text x="14" y="79" font-family="Arial,sans-serif" font-size="10" font-weight="600" fill="#474d4f">Basic DIN Rail</text>
+  <text x="55" y="99" font-family="Arial,sans-serif" font-size="9" fill="#555c5e">Out</text>
+  <rect x="80" y="89" width="12" height="12" rx="1" fill="#a9afb1" stroke="#858b8d"/>
+  <text x="43" y="123" font-family="Arial,sans-serif" font-size="9" fill="#555c5e">Zigbee</text>
+  <rect x="80" y="113" width="12" height="12" rx="1" fill="#a9afb1" stroke="#858b8d"/>
+  <path transform="translate(41 131) scale(1.08333)" fill="#7b8386" d="M11.988 0a11.85 11.85 0 00-8.617 3.696c7.02-.875 11.401-.583 13.289-.34 3.752.583 3.558 3.404 3.558 3.404L8.237 19.112c2.299.22 6.897.366 13.796-.631a11.86 11.86 0 001.912-6.469C23.945 5.374 18.595 0 11.988 0zm.232 4.31c-2.451-.014-5.772.146-9.963.723C.854 7.003.055 9.41.055 12.012.055 18.626 5.38 24 11.988 24c3.63 0 6.85-1.63 9.053-4.182-7.286.948-11.813.631-13.75.388-3.775-.56-3.557-3.404-3.557-3.404L15.691 4.474a38.635 38.635 0 00-3.471-.163Z"/>
+  <path d="M6 162h96v5H6z" fill="#c2c8c9"/>
+  <rect x="7" y="168" width="94" height="88" fill="url(#face)"/>
+  <text x="54" y="242" font-family="Arial,sans-serif" font-size="7.4" text-anchor="middle" fill="#586062">100–240V~  ·  32A MAX</text>
+  <path d="M7 254h94v5H7z" fill="#c2c8c9"/>
+</svg>
