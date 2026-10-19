@@ -1,0 +1,43 @@
+<!doctype html><html lang="ru"><meta charset="utf-8"><style>body{margin:0;padding:20px;background:#e9edf0;font-family:Arial,sans-serif}main{width:420px;max-width:calc(100vw - 40px)}ha-card{background:#fff;border-radius:14px;box-shadow:0 2px 10px #0002}</style><main id="target"></main><script type="module">
+import './sonoff-din-rail-card.js';
+const compact = new URLSearchParams(location.search).has('compact');
+const single = new URLSearchParams(location.search).has('single');
+const card = document.createElement('sonoff-din-rail-card');
+card.setConfig({ title: single ? '2 Этаж' : 'Реле щита', design: compact ? 'compact' : 'full', entities: single ? [
+  { entity: 'switch.gate', name: '2 Этаж', voltage_entity: 'sensor.gate_voltage', current_entity: 'sensor.gate_current', power_entity: 'sensor.gate_power' }
+] : [
+  { entity: 'switch.gate', name: 'Ворота', voltage_entity: 'sensor.gate_voltage', current_entity: 'sensor.gate_current', power_entity: 'sensor.gate_power' },
+  { entity: 'switch.pump', name: 'Насос', voltage_entity: 'sensor.pump_voltage', current_entity: 'sensor.pump_current', power_entity: 'sensor.pump_power' },
+  { entity: 'switch.light', name: 'Свет' }
+]});
+const state=(id,value,unit,attrs={})=>({entity_id:id,state:String(value),attributes:{unit_of_measurement:unit,...attrs}});
+card.hass={states:{
+  'switch.gate':state('switch.gate','on',null,{friendly_name:'Ворота'}),
+  'switch.pump':state('switch.pump','on',null,{friendly_name:'Насос'}),
+  'switch.light':state('switch.light','off',null,{friendly_name:'Свет',voltage:229.4,current:0,power:0}),
+  'sensor.gate_voltage':state('sensor.gate_voltage',single ? 234 : 231.4,'V'),
+  'sensor.gate_current':state('sensor.gate_current',single ? 0.88 : 0.48,'A'),
+  'sensor.gate_power':state('sensor.gate_power',single ? 184 : 110,'W'),
+  'sensor.pump_voltage':state('sensor.pump_voltage',230.1,'V'),
+  'sensor.pump_current':state('sensor.pump_current',2.64,'A'),
+  'sensor.pump_power':state('sensor.pump_power',0.55,'kW'),
+},callService:async()=>{}};
+document.querySelector('#target').append(card);
+window.previewCard=card;
+if (new URLSearchParams(location.search).has('live')) {
+  card.hass={...card._hass,states:{...card._hass.states,
+    'sensor.gate_voltage':state('sensor.gate_voltage',227,'V'),
+    'sensor.gate_current':state('sensor.gate_current',1.25,'A'),
+    'sensor.gate_power':state('sensor.gate_power',284,'W'),
+  }};
+  document.body.dataset.live=[...card.shadowRoot.querySelectorAll('.unit:first-child .reading-value')].map(el=>el.textContent).join('|');
+}
+if (new URLSearchParams(location.search).has('hit')) {
+  const button=card.shadowRoot.querySelector('.power');
+  const box=button.getBoundingClientRect();
+  const center=card.shadowRoot.elementFromPoint(box.x+box.width/2,box.y+box.height/2);
+  const display=card.shadowRoot.querySelector('.telemetry').getBoundingClientRect();
+  const outside=card.shadowRoot.elementFromPoint(display.x+display.width/2,display.y+display.height/2);
+  document.body.dataset.hit=`${center?.closest('button')===button}|${outside?.closest('button')===button}`;
+}
+</script></html>

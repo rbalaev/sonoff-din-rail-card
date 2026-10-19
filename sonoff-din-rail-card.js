@@ -1,5 +1,5 @@
 /* Sonoff DIN Rail Card — dependency-free Lovelace card */
-const DIN_CARD_VERSION = "2.14";
+const DIN_CARD_VERSION = "2.18";
 const DIN_CARD_IMAGE = new URL(`./sonoff-din-rail-card.svg?v=${DIN_CARD_VERSION}`, import.meta.url).href;
 const DIN_CARD_COMPACT_IMAGE = new URL(`./sonoff-din-rail-card-compact.svg?v=${DIN_CARD_VERSION}`, import.meta.url).href;
 
@@ -36,7 +36,11 @@ function dinMetric(hass, item, kind) {
 }
 
 function dinTelemetry(hass, item) {
-  return Object.keys(DIN_METRICS).map((kind) => `${dinMetric(hass, item, kind)} ${DIN_METRICS[kind].unit}`);
+  return Object.keys(DIN_METRICS).map((kind) => {
+    const value = dinMetric(hass, item, kind);
+    const unit = DIN_METRICS[kind].unit;
+    return { value, unit, text: `${value} ${unit}` };
+  });
 }
 
 class SonoffDinRailCard extends HTMLElement {
@@ -101,7 +105,7 @@ class SonoffDinRailCard extends HTMLElement {
     const items = dinItems(this._config);
     const units = this.shadowRoot.querySelectorAll(".unit");
     if (units.length !== items.length) { this._render(); return; }
-    const fingerprint = items.map((item) => `${item.entity}:${this._hass?.states?.[item.entity]?.state || "missing"}:${this._pending.has(item.entity)}:${dinTelemetry(this._hass, item).join("/")}`).join("|");
+    const fingerprint = items.map((item) => `${item.entity}:${this._hass?.states?.[item.entity]?.state || "missing"}:${this._pending.has(item.entity)}:${dinTelemetry(this._hass, item).map((reading) => reading.text).join("/")}`).join("|");
     if (fingerprint === this._stateFingerprint) return;
     this._stateFingerprint = fingerprint;
     units.forEach((unit, index) => {
@@ -119,10 +123,10 @@ class SonoffDinRailCard extends HTMLElement {
       button.title = `${name} — ${status}`;
       button.setAttribute("aria-label", `${name}: ${status}`);
       const [voltage, current, power] = dinTelemetry(this._hass, items[index]);
-      unit.querySelector(".reading-voltage .reading-value").textContent = voltage;
-      unit.querySelector(".reading-current .reading-value").textContent = current;
-      unit.querySelector(".reading-power .reading-value").textContent = power;
-      unit.querySelector(".telemetry").title = `Напряжение ${voltage}; ток ${current}; мощность ${power}`;
+      for (const [kind, reading] of [["voltage", voltage], ["current", current], ["power", power]]) {
+        unit.querySelector(`.reading-${kind} .reading-number`).textContent = reading.value;
+      }
+      unit.querySelector(".telemetry").title = `Напряжение ${voltage.text}; ток ${current.text}; мощность ${power.text}`;
     });
   }
 
@@ -248,10 +252,10 @@ class SonoffDinRailCard extends HTMLElement {
           <button class="power" type="button" aria-label="${name}: ${status}" title="${name} — ${status}">
             <span class="power-face"><svg viewBox="0 0 40 40" aria-hidden="true"><path d="M20 5v17M10 10a15 15 0 1 0 20 0"/></svg></span>
           </button>
-          <div class="telemetry" title="Напряжение ${voltage}; ток ${current}; мощность ${power}">
-            <div class="reading reading-voltage"><span class="reading-label">НАПР.</span><span class="reading-value">${voltage}</span></div>
-            <div class="reading reading-current"><span class="reading-label">ТОК</span><span class="reading-value">${current}</span></div>
-            <div class="reading reading-power"><span class="reading-label">МОЩНОСТЬ</span><span class="reading-value">${power}</span></div>
+          <div class="telemetry" title="Напряжение ${voltage.text}; ток ${current.text}; мощность ${power.text}">
+            <div class="reading reading-voltage"><span class="reading-label">НАПР.</span><span class="reading-value"><span class="reading-number">${voltage.value}</span> <span class="reading-unit">${voltage.unit}</span></span></div>
+            <div class="reading reading-current"><span class="reading-label">ТОК</span><span class="reading-value"><span class="reading-number">${current.value}</span> <span class="reading-unit">${current.unit}</span></span></div>
+            <div class="reading reading-power"><span class="reading-label">МОЩНОСТЬ</span><span class="reading-value"><span class="reading-number">${power.value}</span> <span class="reading-unit">${power.unit}</span></span></div>
           </div>
         </div>
         <div class="status"><span class="dot"></span><span class="status-label">${busy ? "Переключение…" : status}</span></div>
@@ -274,13 +278,13 @@ class SonoffDinRailCard extends HTMLElement {
       .power { position: absolute; left: 25.9%; top: 56%; width: 48.2%; aspect-ratio: 1; border: 0; background: transparent; color: #a94d12; cursor: pointer; display: block; padding: 0; touch-action: none; clip-path: polygon(27% 0,73% 0,100% 27%,100% 73%,73% 100%,27% 100%,0 73%,0 27%); }
       .power-face { position: absolute; inset: 0; width: 100%; height: 100%; background: linear-gradient(135deg,#f6ad52,#e78328 65%,#cd641b); display: grid; place-items: center; filter: drop-shadow(1px 2px 2px #5556); }
       .compact .power { left: 24.5%; top: 56.3%; width: 51%; height: 18.3%; aspect-ratio: auto; }
-      .telemetry { position: absolute; top: 67.6%; left: 13.4%; width: 73.2%; height: 9.9%; display: grid; grid-template-columns: 1fr 1fr; grid-template-rows: 1fr 1fr; color: #233b42; font-family: Arial,sans-serif; font-variant-numeric: tabular-nums; pointer-events: none; }
-      .compact .telemetry { top: 77%; left: 13%; width: 74%; height: 17%; }
+      .telemetry { position: absolute; top: 67.6%; left: 10%; width: 80%; height: 9.9%; display: grid; grid-template-columns: 48% 52%; grid-template-rows: 1fr 1fr; color: #233b42; font-family: Arial,sans-serif; font-variant-numeric: tabular-nums; pointer-events: none; }
+      .compact .telemetry { top: 77%; left: 9%; width: 82%; height: 17%; }
       .reading { min-width: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; overflow: hidden; white-space: nowrap; }
       .reading-current { border-left: 1px solid #bdd2d6; }
       .reading-power { grid-column: 1 / -1; border-top: 1px solid #bdd2d6; }
       .reading-label { color: #607b82; font-size: clamp(6.5px, 6.5cqw, 8px); font-weight: 700; letter-spacing: .02em; line-height: 1.05; }
-      .reading-value { color: #233b42; font-size: clamp(10px, 10.5cqw, 12px); font-weight: 800; line-height: 1.08; }
+      .reading-value { color: #233b42; display: inline-flex; align-items: baseline; justify-content: center; gap: .38em; font-size: clamp(10px, 10cqw, 11.5px); font-weight: 800; line-height: 1.08; }
       .reading-power .reading-value { color: #086b80; font-size: clamp(11px, 11.8cqw, 13px); }
       .power svg { width: 65%; height: 65%; fill: none; stroke: currentColor; stroke-width: 3.5; stroke-linecap: round; pointer-events: none; }
       .power:focus-visible { outline: 2px solid var(--primary-color, #03a9f4); outline-offset: -2px; }
@@ -313,9 +317,53 @@ class SonoffDinRailCard extends HTMLElement {
 }
 
 class SonoffDinRailCardEditor extends HTMLElement {
-  constructor() { super(); this.attachShadow({ mode: "open" }); }
+  constructor() { super(); this.attachShadow({ mode: "open" }); this._showAllMetrics = new Set(); }
   setConfig(config) { this._config = { ...config, entities: dinItems(config), scale: Number(config?.scale) || 1, fit: config?.fit !== false }; this._render(); }
-  set hass(hass) { const firstHass = !this._hass; this._hass = hass; if (this._config && (firstHass || !this._rendered)) this._render(); }
+  set hass(hass) {
+    const firstHass = !this._hass;
+    this._hass = hass;
+    if (this._config && (firstHass || !this._rendered)) this._render();
+    if (hass?.connection && this._registryConnection !== hass.connection) {
+      this._registryConnection = hass.connection;
+      this._entityDeviceIds = null;
+      this._loadEntityRegistry(hass.connection);
+    }
+  }
+  async _loadEntityRegistry(connection) {
+    try {
+      const entities = await connection.sendMessagePromise({ type: "config/entity_registry/list" });
+      if (connection !== this._registryConnection) return;
+      this._entityDeviceIds = new Map(entities.map(({ entity_id, device_id }) => [entity_id, device_id]));
+    } catch {
+      if (connection !== this._registryConnection) return;
+      this._entityDeviceIds = new Map();
+    }
+    this._refreshMetricOptions();
+  }
+  _metricOptions(kind, current, item, index) {
+    const units = { voltage: ["V", "В"], current: ["A", "А", "mA"], power: ["W", "Вт", "kW"] };
+    const deviceId = this._entityDeviceIds?.get(item.entity);
+    const all = Object.values(this._hass?.states || {}).filter((s) => s.entity_id.startsWith("sensor.") && (s.attributes.device_class === kind || units[kind].includes(s.attributes.unit_of_measurement)));
+    const sensors = deviceId && !this._showAllMetrics.has(index) ? all.filter((s) => this._entityDeviceIds.get(s.entity_id) === deviceId) : all;
+    sensors.sort((a, b) => (a.attributes.friendly_name || a.entity_id).localeCompare(b.attributes.friendly_name || b.entity_id, "ru"));
+    return `<option value="">Атрибут реле / не задано</option>${sensors.map((s) => `<option value="${dinEscape(s.entity_id)}" ${s.entity_id === current ? "selected" : ""}>${dinEscape(s.attributes.friendly_name || s.entity_id)} (${dinEscape(s.entity_id)})</option>`).join("")}${current && !sensors.some((s) => s.entity_id === current) ? `<option value="${dinEscape(current)}" selected>${dinEscape(current)} (сохранённый датчик вне списка)</option>` : ""}`;
+  }
+  _refreshMetricOptions() {
+    this.shadowRoot.querySelectorAll(".row").forEach((row) => {
+      const index = Number(row.dataset.index);
+      const item = this._config?.entities[index];
+      if (!item) return;
+      row.querySelectorAll(".metric-source").forEach((select) => {
+        const refresh = () => { select.innerHTML = this._metricOptions(select.dataset.kind, item[`${select.dataset.kind}_entity`], item, index); };
+        if (this.shadowRoot.activeElement === select) select.addEventListener("blur", refresh, { once: true });
+        else refresh();
+      });
+      const scope = row.querySelector(".scope-hint");
+      if (scope) scope.textContent = this._entityDeviceIds?.get(item.entity) ? this._showAllMetrics.has(index) ? "Показаны все подходящие датчики." : "Показаны датчики выбранного устройства." : "Привязка к устройству недоступна — показаны все подходящие датчики.";
+      const toggle = row.querySelector(".scope-toggle");
+      if (toggle) toggle.hidden = !this._entityDeviceIds?.get(item.entity);
+    });
+  }
   _update() {
     this._openRows = [...this.shadowRoot.querySelectorAll("details.actions[open]")].map((el) => Number(el.closest(".row").dataset.index));
     this._openTelemetryRows = [...this.shadowRoot.querySelectorAll("details.readings[open]")].map((el) => Number(el.closest(".row").dataset.index));
@@ -327,11 +375,6 @@ class SonoffDinRailCardEditor extends HTMLElement {
     this._rendered = true;
     const available = Object.values(this._hass?.states || {}).filter((s) => /^(switch|light)\./.test(s.entity_id)).sort((a, b) => (a.attributes.friendly_name || a.entity_id).localeCompare(b.attributes.friendly_name || b.entity_id, "ru"));
     const options = (current) => `<option value="">Выбрать реле…</option>${available.map((s) => `<option value="${dinEscape(s.entity_id)}" ${s.entity_id === current ? "selected" : ""}>${dinEscape(s.attributes.friendly_name || s.entity_id)} (${dinEscape(s.entity_id)})</option>`).join("")}${current && !available.some((s) => s.entity_id === current) ? `<option value="${dinEscape(current)}" selected>${dinEscape(current)} (не найдено)</option>` : ""}`;
-    const metricOptions = (kind, current) => {
-      const units = { voltage: ["V", "В"], current: ["A", "А", "mA"], power: ["W", "Вт", "kW"] };
-      const sensors = Object.values(this._hass?.states || {}).filter((s) => s.entity_id.startsWith("sensor.") && (s.attributes.device_class === kind || units[kind].includes(s.attributes.unit_of_measurement))).sort((a, b) => (a.attributes.friendly_name || a.entity_id).localeCompare(b.attributes.friendly_name || b.entity_id, "ru"));
-      return `<option value="">Атрибут реле / не задано</option>${sensors.map((s) => `<option value="${dinEscape(s.entity_id)}" ${s.entity_id === current ? "selected" : ""}>${dinEscape(s.attributes.friendly_name || s.entity_id)} (${dinEscape(s.entity_id)})</option>`).join("")}${current && !sensors.some((s) => s.entity_id === current) ? `<option value="${dinEscape(current)}" selected>${dinEscape(current)} (нет в списке)</option>` : ""}`;
-    };
     const actionFields = (item, gesture, label) => {
       const a = item[`${gesture}_action`] || { action: gesture === "tap" ? "toggle" : gesture === "hold" ? "more-info" : "none" };
       const choices = [["toggle","Переключить"],["more-info","Подробнее"],["navigate","Перейти"],["url","Открыть URL"],["perform-action","Выполнить действие"],["assist","Assist"],["none","Ничего"],["fire-dom-event","Событие DOM"]];
@@ -347,6 +390,7 @@ class SonoffDinRailCardEditor extends HTMLElement {
       .row select { min-width: 0; }
       .row .name, .row .actions, .row .readings { grid-column: 1 / -1; }
       .actions, .readings { border: 1px solid var(--divider-color, #aaa); border-radius: 7px; padding: 6px; }
+      .scope-toggle[hidden] { display: none; }
       .actions summary, .readings summary { cursor: pointer; }
       .actions label, .readings label { margin-top: 8px; }
       .action-extra { display: grid; gap: 4px; }
@@ -359,7 +403,7 @@ class SonoffDinRailCardEditor extends HTMLElement {
       <label>Вид реле<select class="design"><option value="full" ${this._config.design !== "compact" ? "selected" : ""}>С клеммами и винтами</option><option value="compact" ${this._config.design === "compact" ? "selected" : ""}>Компактный, без винтов</option></select></label>
       <label>Масштаб реле: ${Math.round(this._config.scale * 100)}%<input class="scale" type="range" min="0.25" max="1.5" step="0.05" value="${this._config.scale}"></label>
       <label><span><input class="fit" type="checkbox" ${this._config.fit ? "checked" : ""}> Подогнать ряд по ширине при масштабе 100%</span></label>
-      ${this._config.entities.map((item, index) => `<div class="row" data-index="${index}"><select class="entity">${options(item.entity)}</select><button class="remove" type="button" title="Удалить реле" aria-label="Удалить реле">×</button><input class="name" placeholder="Подпись (необязательно)" value="${dinEscape(item.name)}"><details class="readings" ${this._openTelemetryRows?.includes(index) ? "open" : ""}><summary>Показания под кнопкой</summary><label>Напряжение, В<select class="metric-source" data-kind="voltage">${metricOptions("voltage", item.voltage_entity)}</select></label><label>Ток, А<select class="metric-source" data-kind="current">${metricOptions("current", item.current_entity)}</select></label><label>Мощность, Вт<select class="metric-source" data-kind="power">${metricOptions("power", item.power_entity)}</select></label><div class="hint">Если у реле есть одноимённые атрибуты, они используются без выбора сенсора.</div></details><details class="actions" ${this._openRows?.includes(index) ? "open" : ""}><summary>Действия оранжевой кнопки</summary>${actionFields(item,"tap","Короткое нажатие")}${actionFields(item,"hold","Долгое нажатие")}${actionFields(item,"double_tap","Двойное нажатие")}</details></div>`).join("")}
+      ${this._config.entities.map((item, index) => `<div class="row" data-index="${index}"><select class="entity">${options(item.entity)}</select><button class="remove" type="button" title="Удалить реле" aria-label="Удалить реле">×</button><input class="name" placeholder="Подпись (необязательно)" value="${dinEscape(item.name)}"><details class="readings" ${this._openTelemetryRows?.includes(index) ? "open" : ""}><summary>Показания под кнопкой</summary><label>Напряжение, В<select class="metric-source" data-kind="voltage">${this._metricOptions("voltage", item.voltage_entity, item, index)}</select></label><label>Ток, А<select class="metric-source" data-kind="current">${this._metricOptions("current", item.current_entity, item, index)}</select></label><label>Мощность, Вт<select class="metric-source" data-kind="power">${this._metricOptions("power", item.power_entity, item, index)}</select></label><label class="scope-toggle" ${this._entityDeviceIds?.get(item.entity) ? "" : "hidden"}><span><input class="show-all-metrics" type="checkbox" ${this._showAllMetrics.has(index) ? "checked" : ""}> Показать все датчики</span></label><div class="hint scope-hint">${this._entityDeviceIds?.get(item.entity) ? this._showAllMetrics.has(index) ? "Показаны все подходящие датчики." : "Показаны датчики выбранного устройства." : "Привязка к устройству недоступна — показаны все подходящие датчики."}</div><div class="hint">Если у реле есть одноимённые атрибуты, они используются без выбора сенсора.</div></details><details class="actions" ${this._openRows?.includes(index) ? "open" : ""}><summary>Действия оранжевой кнопки</summary>${actionFields(item,"tap","Короткое нажатие")}${actionFields(item,"hold","Долгое нажатие")}${actionFields(item,"double_tap","Двойное нажатие")}</details></div>`).join("")}
       <button class="add" type="button">+ Добавить реле</button><div class="hint">Версия ${DIN_CARD_VERSION}. Количество модулей равно числу строк. Поддерживаются сущности switch и light.</div></div>`;
     this.shadowRoot.querySelector(".title").addEventListener("change", (e) => { this._config.title = e.target.value; this._update(); });
     this.shadowRoot.querySelector(".design").addEventListener("change", (e) => { this._config.design = e.target.value; this._update(); });
@@ -368,10 +412,11 @@ class SonoffDinRailCardEditor extends HTMLElement {
     this.shadowRoot.querySelector(".add").addEventListener("click", () => { this._config.entities.push({ entity: "", name: "" }); this._update(); });
     this.shadowRoot.querySelectorAll(".row").forEach((row) => {
       const index = Number(row.dataset.index);
-      row.querySelector(".entity").addEventListener("change", (e) => { this._config.entities[index].entity = e.target.value; this._update(); });
+      row.querySelector(".entity").addEventListener("change", (e) => { this._config.entities[index].entity = e.target.value; this._showAllMetrics.delete(index); this._update(); });
       row.querySelector(".name").addEventListener("change", (e) => { this._config.entities[index].name = e.target.value; this._update(); });
       row.querySelectorAll(".metric-source").forEach((select) => select.addEventListener("change", () => { this._config.entities[index][`${select.dataset.kind}_entity`] = select.value; this._update(); }));
-      row.querySelector(".remove").addEventListener("click", () => { this._config.entities.splice(index, 1); this._update(); });
+      row.querySelector(".show-all-metrics").addEventListener("change", (e) => { if (e.target.checked) this._showAllMetrics.add(index); else this._showAllMetrics.delete(index); this._refreshMetricOptions(); });
+      row.querySelector(".remove").addEventListener("click", () => { this._config.entities.splice(index, 1); this._showAllMetrics.clear(); this._update(); });
       row.querySelectorAll(".action-type").forEach((select) => select.addEventListener("change", () => { this._config.entities[index][`${select.dataset.gesture}_action`] = { action: select.value }; this._update(); }));
       row.querySelectorAll(".action-param").forEach((input) => input.addEventListener("change", () => { const gesture = input.closest(".action-extra").dataset.gesture; this._config.entities[index][`${gesture}_action`][input.dataset.key] = input.value; this._update(); }));
       row.querySelectorAll(".action-json").forEach((input) => input.addEventListener("change", () => { try { const value = JSON.parse(input.value || "{}"); const gesture = input.closest(".action-extra").dataset.gesture; this._config.entities[index][`${gesture}_action`][input.dataset.key] = value; input.setCustomValidity(""); this._update(); } catch { input.setCustomValidity("Нужен корректный JSON"); input.reportValidity(); } }));

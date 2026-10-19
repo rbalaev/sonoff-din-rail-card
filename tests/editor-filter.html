@@ -1,0 +1,36 @@
+<!doctype html><html lang="ru"><meta charset="utf-8"><body><script type="module">
+import '../sonoff-din-rail-card.js';
+const state = (entity_id, device_class, unit) => ({ entity_id, state: '1', attributes: { friendly_name: entity_id, device_class, unit_of_measurement: unit } });
+const states = {
+  'switch.a': state('switch.a'), 'switch.b': state('switch.b'),
+  'sensor.a_voltage': state('sensor.a_voltage', 'voltage', 'V'),
+  'sensor.a_current': state('sensor.a_current', 'current', 'A'),
+  'sensor.b_voltage': state('sensor.b_voltage', 'voltage', 'V'),
+  'sensor.b_current': state('sensor.b_current', 'current', 'A'),
+  'sensor.external_current': state('sensor.external_current', 'current', 'A'),
+};
+const connection = { sendMessagePromise: async () => [
+  { entity_id: 'switch.a', device_id: 'device-a' }, { entity_id: 'switch.b', device_id: 'device-b' },
+  { entity_id: 'sensor.a_voltage', device_id: 'device-a' }, { entity_id: 'sensor.a_current', device_id: 'device-a' },
+  { entity_id: 'sensor.b_voltage', device_id: 'device-b' }, { entity_id: 'sensor.b_current', device_id: 'device-b' },
+  { entity_id: 'sensor.external_current', device_id: 'device-external' },
+] };
+const editor = document.createElement('sonoff-din-rail-card-editor');
+editor.setConfig({ entities: [{ entity: 'switch.a', current_entity: 'sensor.external_current' }] });
+document.body.append(editor);
+editor.hass = { states, connection };
+await new Promise((resolve) => setTimeout(resolve, 0));
+const values = (kind) => [...editor.shadowRoot.querySelector(`.metric-source[data-kind="${kind}"]`).options].map((option) => option.value);
+const initiallyFiltered = values('voltage').includes('sensor.a_voltage') && !values('voltage').includes('sensor.b_voltage');
+const externalRetained = editor.shadowRoot.querySelector('.metric-source[data-kind="current"]').value === 'sensor.external_current';
+const oldSelect = editor.shadowRoot.querySelector('.metric-source[data-kind="voltage"]');
+editor.hass = { states: { ...states }, connection };
+const stateUpdateKeptSelect = editor.shadowRoot.querySelector('.metric-source[data-kind="voltage"]') === oldSelect;
+const showAll = editor.shadowRoot.querySelector('.show-all-metrics');
+showAll.checked = true; showAll.dispatchEvent(new Event('change'));
+const allVisible = values('voltage').includes('sensor.b_voltage');
+const relay = editor.shadowRoot.querySelector('.entity');
+relay.value = 'switch.b'; relay.dispatchEvent(new Event('change'));
+const switchedFilter = values('voltage').includes('sensor.b_voltage') && !values('voltage').includes('sensor.a_voltage');
+document.body.dataset.result = JSON.stringify({ initiallyFiltered, externalRetained, stateUpdateKeptSelect, allVisible, switchedFilter });
+</script></body></html>
