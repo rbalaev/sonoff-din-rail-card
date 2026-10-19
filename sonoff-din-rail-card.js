@@ -1,5 +1,5 @@
 /* Sonoff DIN Rail Card — dependency-free Lovelace card */
-const DIN_CARD_VERSION = "2.12";
+const DIN_CARD_VERSION = "2.14";
 const DIN_CARD_IMAGE = new URL(`./sonoff-din-rail-card.svg?v=${DIN_CARD_VERSION}`, import.meta.url).href;
 const DIN_CARD_COMPACT_IMAGE = new URL(`./sonoff-din-rail-card-compact.svg?v=${DIN_CARD_VERSION}`, import.meta.url).href;
 
@@ -14,6 +14,29 @@ function dinEscape(value) {
   return String(value).replace(/[&<>"']/g, (ch) => ({
     "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;",
   })[ch]);
+}
+
+const DIN_METRICS = {
+  voltage: { unit: "В", digits: 0 },
+  current: { unit: "А", digits: 2 },
+  power: { unit: "Вт", digits: 0 },
+};
+
+function dinMetric(hass, item, kind) {
+  const source = item[`${kind}_entity`];
+  const raw = source ? hass?.states?.[source]?.state : hass?.states?.[item.entity]?.attributes?.[kind];
+  if (raw === undefined || raw === null || raw === "" || ["unknown", "unavailable", "none"].includes(String(raw).toLowerCase())) return "—";
+  const number = Number(String(raw).replace(",", "."));
+  if (!Number.isFinite(number)) return "—";
+  const unit = source ? hass?.states?.[source]?.attributes?.unit_of_measurement : null;
+  const allowed = { voltage: ["V", "В"], current: ["A", "А", "mA"], power: ["W", "Вт", "kW"] };
+  if (unit && !allowed[kind].includes(unit)) return "—";
+  const normalized = unit === "kW" && kind === "power" ? number * 1000 : unit === "mA" && kind === "current" ? number / 1000 : number;
+  return new Intl.NumberFormat("ru-RU", { maximumFractionDigits: DIN_METRICS[kind].digits }).format(normalized);
+}
+
+function dinTelemetry(hass, item) {
+  return Object.keys(DIN_METRICS).map((kind) => `${dinMetric(hass, item, kind)} ${DIN_METRICS[kind].unit}`);
 }
 
 class SonoffDinRailCard extends HTMLElement {
@@ -78,7 +101,7 @@ class SonoffDinRailCard extends HTMLElement {
     const items = dinItems(this._config);
     const units = this.shadowRoot.querySelectorAll(".unit");
     if (units.length !== items.length) { this._render(); return; }
-    const fingerprint = items.map((item) => `${item.entity}:${this._hass?.states?.[item.entity]?.state || "missing"}:${this._pending.has(item.entity)}`).join("|");
+    const fingerprint = items.map((item) => `${item.entity}:${this._hass?.states?.[item.entity]?.state || "missing"}:${this._pending.has(item.entity)}:${dinTelemetry(this._hass, item).join("/")}`).join("|");
     if (fingerprint === this._stateFingerprint) return;
     this._stateFingerprint = fingerprint;
     units.forEach((unit, index) => {
@@ -95,6 +118,11 @@ class SonoffDinRailCard extends HTMLElement {
       const button = unit.querySelector(".power");
       button.title = `${name} — ${status}`;
       button.setAttribute("aria-label", `${name}: ${status}`);
+      const [voltage, current, power] = dinTelemetry(this._hass, items[index]);
+      unit.querySelector(".reading-voltage .reading-value").textContent = voltage;
+      unit.querySelector(".reading-current .reading-value").textContent = current;
+      unit.querySelector(".reading-power .reading-value").textContent = power;
+      unit.querySelector(".telemetry").title = `Напряжение ${voltage}; ток ${current}; мощность ${power}`;
     });
   }
 
@@ -210,6 +238,7 @@ class SonoffDinRailCard extends HTMLElement {
       const busy = this._pending.has(entity);
       const name = dinEscape(item.name || obj?.attributes?.friendly_name || entity || `Реле ${index + 1}`);
       const status = !entity ? "Не выбрано" : !obj ? "Не найдено" : state === "on" ? "Включено" : state === "off" ? "Выключено" : "Недоступно";
+      const [voltage, current, power] = dinTelemetry(this._hass, item);
       return `<div class="unit ${compact ? "compact" : ""} ${state === "on" ? "is-on" : ""} ${available ? "is-available" : "is-unavailable"}">
         <div class="module">
           <img class="product" src="${image}" alt="" draggable="false">
@@ -219,6 +248,11 @@ class SonoffDinRailCard extends HTMLElement {
           <button class="power" type="button" aria-label="${name}: ${status}" title="${name} — ${status}">
             <span class="power-face"><svg viewBox="0 0 40 40" aria-hidden="true"><path d="M20 5v17M10 10a15 15 0 1 0 20 0"/></svg></span>
           </button>
+          <div class="telemetry" title="Напряжение ${voltage}; ток ${current}; мощность ${power}">
+            <div class="reading reading-voltage"><span class="reading-label">НАПР.</span><span class="reading-value">${voltage}</span></div>
+            <div class="reading reading-current"><span class="reading-label">ТОК</span><span class="reading-value">${current}</span></div>
+            <div class="reading reading-power"><span class="reading-label">МОЩНОСТЬ</span><span class="reading-value">${power}</span></div>
+          </div>
         </div>
         <div class="status"><span class="dot"></span><span class="status-label">${busy ? "Переключение…" : status}</span></div>
       </div>`;
@@ -230,26 +264,35 @@ class SonoffDinRailCard extends HTMLElement {
       .rail-scroll { overflow-x: auto; padding: 3px 4px 11px; scrollbar-width: thin; }
       .rail { display: grid; grid-template-columns: repeat(var(--count), minmax(0, 1fr)); gap: 5px; width: min(calc(100% * var(--scale)), calc(var(--base-width) * var(--scale))); }
       .rail.no-fit { width: var(--natural-width); }
+      .rail.has-telemetry { min-width: calc(var(--count) * 112px + (var(--count) - 1) * 5px); }
       .unit { min-width: 0; text-align: center; container-type: inline-size; }
-      .module { width: 100%; aspect-ratio: 112 / 482; position: relative; overflow: hidden; border-radius: 4px; box-shadow: 0 2px 8px #0003; background: #eee; }
-      .compact .module { aspect-ratio: 108 / 264; }
+      .module { width: 100%; aspect-ratio: 112 / 514; position: relative; overflow: hidden; border-radius: 4px; box-shadow: 0 2px 8px #0003; background: #eee; }
+      .compact .module { aspect-ratio: 108 / 300; }
       .product { position: absolute; width: 100%; height: 100%; max-width: none; left: 0; top: 0; pointer-events: none; user-select: none; }
-      .device-name { position: absolute; top: 25.3%; left: 9%; width: 82%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-align: center; color: #53595b; font: 800 clamp(5px, 13cqw, 17px)/1.2 Arial,sans-serif; pointer-events: none; }
-      .compact .device-name { top: 7.3%; }
-      .power { position: absolute; left: 25.9%; top: 59.75%; width: 48.2%; aspect-ratio: 1; border: 0; background: transparent; color: #a94d12; cursor: pointer; display: block; padding: 0; touch-action: none; clip-path: polygon(27% 0,73% 0,100% 27%,100% 73%,73% 100%,27% 100%,0 73%,0 27%); }
+      .device-name { position: absolute; top: 23.7%; left: 9%; width: 82%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-align: center; color: #53595b; font: 800 clamp(5px, 13cqw, 17px)/1.2 Arial,sans-serif; pointer-events: none; }
+      .compact .device-name { top: 6.4%; }
+      .power { position: absolute; left: 25.9%; top: 56%; width: 48.2%; aspect-ratio: 1; border: 0; background: transparent; color: #a94d12; cursor: pointer; display: block; padding: 0; touch-action: none; clip-path: polygon(27% 0,73% 0,100% 27%,100% 73%,73% 100%,27% 100%,0 73%,0 27%); }
       .power-face { position: absolute; inset: 0; width: 100%; height: 100%; background: linear-gradient(135deg,#f6ad52,#e78328 65%,#cd641b); display: grid; place-items: center; filter: drop-shadow(1px 2px 2px #5556); }
-      .compact .power { left: 24.5%; top: 64%; width: 51%; height: 21%; aspect-ratio: auto; }
+      .compact .power { left: 24.5%; top: 56.3%; width: 51%; height: 18.3%; aspect-ratio: auto; }
+      .telemetry { position: absolute; top: 67.6%; left: 13.4%; width: 73.2%; height: 9.9%; display: grid; grid-template-columns: 1fr 1fr; grid-template-rows: 1fr 1fr; color: #233b42; font-family: Arial,sans-serif; font-variant-numeric: tabular-nums; pointer-events: none; }
+      .compact .telemetry { top: 77%; left: 13%; width: 74%; height: 17%; }
+      .reading { min-width: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; overflow: hidden; white-space: nowrap; }
+      .reading-current { border-left: 1px solid #bdd2d6; }
+      .reading-power { grid-column: 1 / -1; border-top: 1px solid #bdd2d6; }
+      .reading-label { color: #607b82; font-size: clamp(6.5px, 6.5cqw, 8px); font-weight: 700; letter-spacing: .02em; line-height: 1.05; }
+      .reading-value { color: #233b42; font-size: clamp(10px, 10.5cqw, 12px); font-weight: 800; line-height: 1.08; }
+      .reading-power .reading-value { color: #086b80; font-size: clamp(11px, 11.8cqw, 13px); }
       .power svg { width: 65%; height: 65%; fill: none; stroke: currentColor; stroke-width: 3.5; stroke-linecap: round; pointer-events: none; }
       .power:focus-visible { outline: 2px solid var(--primary-color, #03a9f4); outline-offset: -2px; }
       .power:hover:not(:disabled) .power-face { filter: brightness(1.1) drop-shadow(1px 2px 2px #5556); }
       .power:active:not(:disabled) .power-face { filter: brightness(.9); }
       .power:disabled { cursor: not-allowed; }
       .led { position: absolute; right: 11.607%; width: 9.821%; height: 2.282%; border-radius: 2px; background: #777; opacity: .4; pointer-events: none; }
-      .led-out { top: 41.7%; }
-      .led-zigbee { top: 47.1%; }
+      .led-out { top: 39.1%; }
+      .led-zigbee { top: 44.2%; }
       .compact .led { right: 14.815%; width: 11.111%; height: 4.545%; }
-      .compact .led-out { top: 33.7%; }
-      .compact .led-zigbee { top: 42.8%; }
+      .compact .led-out { top: 29.7%; }
+      .compact .led-zigbee { top: 37.7%; }
       .is-on .led-out { background: #ed3cdb; opacity: 1; box-shadow: 0 0 7px #ed3cdb; }
       .is-available .led-zigbee { background: #29d7ff; opacity: 1; box-shadow: 0 0 7px #29d7ff; }
       .is-unavailable .module { opacity: .6; }
@@ -260,7 +303,7 @@ class SonoffDinRailCard extends HTMLElement {
       .empty { color: var(--secondary-text-color); padding: 28px 8px; text-align: center; }
       .error { color: var(--error-color, #db4437); font-size: 12px; margin: 6px 4px 0; }
       @media (prefers-reduced-motion: reduce) { .power { transition: none; } }
-    </style><ha-card><div class="title">${title}</div>${items.length ? `<div class="rail-scroll"><div class="rail ${this._config.fit === false ? "no-fit" : ""}" style="--count:${items.length};--base-width:${baseWidth}px;--natural-width:${naturalWidth}px;--scale:${scale}">${modules}</div></div>` : `<div class="empty">Добавь реле в настройках карточки</div>`}<div class="error">${dinEscape(this._error || "")}</div></ha-card>`;
+    </style><ha-card><div class="title">${title}</div>${items.length ? `<div class="rail-scroll"><div class="rail has-telemetry ${this._config.fit === false ? "no-fit" : ""}" style="--count:${items.length};--base-width:${baseWidth}px;--natural-width:${naturalWidth}px;--scale:${scale}">${modules}</div></div>` : `<div class="empty">Добавь реле в настройках карточки</div>`}<div class="error">${dinEscape(this._error || "")}</div></ha-card>`;
     const scroll = this.shadowRoot.querySelector(".rail-scroll");
     if (scroll) scroll.scrollLeft = scrollLeft;
     this.shadowRoot.querySelectorAll(".power").forEach((button, index) => this._bindButton(button, items[index]));
@@ -275,6 +318,7 @@ class SonoffDinRailCardEditor extends HTMLElement {
   set hass(hass) { const firstHass = !this._hass; this._hass = hass; if (this._config && (firstHass || !this._rendered)) this._render(); }
   _update() {
     this._openRows = [...this.shadowRoot.querySelectorAll("details.actions[open]")].map((el) => Number(el.closest(".row").dataset.index));
+    this._openTelemetryRows = [...this.shadowRoot.querySelectorAll("details.readings[open]")].map((el) => Number(el.closest(".row").dataset.index));
     this.dispatchEvent(new CustomEvent("config-changed", { detail: { config: this._config }, bubbles: true, composed: true }));
     this._render();
   }
@@ -283,6 +327,11 @@ class SonoffDinRailCardEditor extends HTMLElement {
     this._rendered = true;
     const available = Object.values(this._hass?.states || {}).filter((s) => /^(switch|light)\./.test(s.entity_id)).sort((a, b) => (a.attributes.friendly_name || a.entity_id).localeCompare(b.attributes.friendly_name || b.entity_id, "ru"));
     const options = (current) => `<option value="">Выбрать реле…</option>${available.map((s) => `<option value="${dinEscape(s.entity_id)}" ${s.entity_id === current ? "selected" : ""}>${dinEscape(s.attributes.friendly_name || s.entity_id)} (${dinEscape(s.entity_id)})</option>`).join("")}${current && !available.some((s) => s.entity_id === current) ? `<option value="${dinEscape(current)}" selected>${dinEscape(current)} (не найдено)</option>` : ""}`;
+    const metricOptions = (kind, current) => {
+      const units = { voltage: ["V", "В"], current: ["A", "А", "mA"], power: ["W", "Вт", "kW"] };
+      const sensors = Object.values(this._hass?.states || {}).filter((s) => s.entity_id.startsWith("sensor.") && (s.attributes.device_class === kind || units[kind].includes(s.attributes.unit_of_measurement))).sort((a, b) => (a.attributes.friendly_name || a.entity_id).localeCompare(b.attributes.friendly_name || b.entity_id, "ru"));
+      return `<option value="">Атрибут реле / не задано</option>${sensors.map((s) => `<option value="${dinEscape(s.entity_id)}" ${s.entity_id === current ? "selected" : ""}>${dinEscape(s.attributes.friendly_name || s.entity_id)} (${dinEscape(s.entity_id)})</option>`).join("")}${current && !sensors.some((s) => s.entity_id === current) ? `<option value="${dinEscape(current)}" selected>${dinEscape(current)} (нет в списке)</option>` : ""}`;
+    };
     const actionFields = (item, gesture, label) => {
       const a = item[`${gesture}_action`] || { action: gesture === "tap" ? "toggle" : gesture === "hold" ? "more-info" : "none" };
       const choices = [["toggle","Переключить"],["more-info","Подробнее"],["navigate","Перейти"],["url","Открыть URL"],["perform-action","Выполнить действие"],["assist","Assist"],["none","Ничего"],["fire-dom-event","Событие DOM"]];
@@ -296,10 +345,10 @@ class SonoffDinRailCardEditor extends HTMLElement {
       input, select, button { font: inherit; color: var(--primary-text-color); background: var(--card-background-color, white); border: 1px solid var(--divider-color, #aaa); border-radius: 7px; min-height: 38px; box-sizing: border-box; padding: 6px; }
       .row { display: grid; grid-template-columns: 1fr 40px; gap: 5px; }
       .row select { min-width: 0; }
-      .row .name, .row .actions { grid-column: 1 / -1; }
-      .actions { border: 1px solid var(--divider-color, #aaa); border-radius: 7px; padding: 6px; }
-      .actions summary { cursor: pointer; }
-      .actions label { margin-top: 8px; }
+      .row .name, .row .actions, .row .readings { grid-column: 1 / -1; }
+      .actions, .readings { border: 1px solid var(--divider-color, #aaa); border-radius: 7px; padding: 6px; }
+      .actions summary, .readings summary { cursor: pointer; }
+      .actions label, .readings label { margin-top: 8px; }
       .action-extra { display: grid; gap: 4px; }
       .action-extra:empty { display: none; }
       textarea { width: 100%; min-height: 48px; box-sizing: border-box; resize: vertical; font: inherit; }
@@ -310,7 +359,7 @@ class SonoffDinRailCardEditor extends HTMLElement {
       <label>Вид реле<select class="design"><option value="full" ${this._config.design !== "compact" ? "selected" : ""}>С клеммами и винтами</option><option value="compact" ${this._config.design === "compact" ? "selected" : ""}>Компактный, без винтов</option></select></label>
       <label>Масштаб реле: ${Math.round(this._config.scale * 100)}%<input class="scale" type="range" min="0.25" max="1.5" step="0.05" value="${this._config.scale}"></label>
       <label><span><input class="fit" type="checkbox" ${this._config.fit ? "checked" : ""}> Подогнать ряд по ширине при масштабе 100%</span></label>
-      ${this._config.entities.map((item, index) => `<div class="row" data-index="${index}"><select class="entity">${options(item.entity)}</select><button class="remove" type="button" title="Удалить реле" aria-label="Удалить реле">×</button><input class="name" placeholder="Подпись (необязательно)" value="${dinEscape(item.name)}"><details class="actions" ${this._openRows?.includes(index) ? "open" : ""}><summary>Действия оранжевой кнопки</summary>${actionFields(item,"tap","Короткое нажатие")}${actionFields(item,"hold","Долгое нажатие")}${actionFields(item,"double_tap","Двойное нажатие")}</details></div>`).join("")}
+      ${this._config.entities.map((item, index) => `<div class="row" data-index="${index}"><select class="entity">${options(item.entity)}</select><button class="remove" type="button" title="Удалить реле" aria-label="Удалить реле">×</button><input class="name" placeholder="Подпись (необязательно)" value="${dinEscape(item.name)}"><details class="readings" ${this._openTelemetryRows?.includes(index) ? "open" : ""}><summary>Показания под кнопкой</summary><label>Напряжение, В<select class="metric-source" data-kind="voltage">${metricOptions("voltage", item.voltage_entity)}</select></label><label>Ток, А<select class="metric-source" data-kind="current">${metricOptions("current", item.current_entity)}</select></label><label>Мощность, Вт<select class="metric-source" data-kind="power">${metricOptions("power", item.power_entity)}</select></label><div class="hint">Если у реле есть одноимённые атрибуты, они используются без выбора сенсора.</div></details><details class="actions" ${this._openRows?.includes(index) ? "open" : ""}><summary>Действия оранжевой кнопки</summary>${actionFields(item,"tap","Короткое нажатие")}${actionFields(item,"hold","Долгое нажатие")}${actionFields(item,"double_tap","Двойное нажатие")}</details></div>`).join("")}
       <button class="add" type="button">+ Добавить реле</button><div class="hint">Версия ${DIN_CARD_VERSION}. Количество модулей равно числу строк. Поддерживаются сущности switch и light.</div></div>`;
     this.shadowRoot.querySelector(".title").addEventListener("change", (e) => { this._config.title = e.target.value; this._update(); });
     this.shadowRoot.querySelector(".design").addEventListener("change", (e) => { this._config.design = e.target.value; this._update(); });
@@ -321,6 +370,7 @@ class SonoffDinRailCardEditor extends HTMLElement {
       const index = Number(row.dataset.index);
       row.querySelector(".entity").addEventListener("change", (e) => { this._config.entities[index].entity = e.target.value; this._update(); });
       row.querySelector(".name").addEventListener("change", (e) => { this._config.entities[index].name = e.target.value; this._update(); });
+      row.querySelectorAll(".metric-source").forEach((select) => select.addEventListener("change", () => { this._config.entities[index][`${select.dataset.kind}_entity`] = select.value; this._update(); }));
       row.querySelector(".remove").addEventListener("click", () => { this._config.entities.splice(index, 1); this._update(); });
       row.querySelectorAll(".action-type").forEach((select) => select.addEventListener("change", () => { this._config.entities[index][`${select.dataset.gesture}_action`] = { action: select.value }; this._update(); }));
       row.querySelectorAll(".action-param").forEach((input) => input.addEventListener("change", () => { const gesture = input.closest(".action-extra").dataset.gesture; this._config.entities[index][`${gesture}_action`][input.dataset.key] = input.value; this._update(); }));
